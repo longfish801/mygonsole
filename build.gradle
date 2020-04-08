@@ -1,0 +1,96 @@
+/*
+ * build.gradle
+ *
+ * Copyright (C) jp.coocan.cute.longfish All Rights Reserved.
+ */
+
+plugins {
+	id 'edu.sc.seis.launch4j' version '2.4.6'
+	id 'com.github.monosoul.markdown.page.generator' version '2.1.0'
+}
+
+tasks.withType(AbstractCompile).each { it.options.encoding = 'UTF-8' }
+tasks.withType(Javadoc).each { it.options.encoding = 'UTF-8' }
+
+apply plugin: 'groovy'
+version = '0.1.00'
+defaultTasks 'deploy'
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation group: 'ch.qos.logback', name: 'logback-classic', version: '1.2.3'
+	implementation group: 'commons-io', name: 'commons-io', version: '2.6'
+	implementation group: 'org.slf4j', name: 'slf4j-api', version: '1.7.25'
+	implementation group: 'org.apache.commons', name: 'commons-lang3', version: '3.8.1';
+	implementation group: 'org.codehaus.groovy', name: 'groovy-all', version: '2.5.10'
+}
+
+groovydoc {
+	overviewText = resources.text.fromFile('src/main/resources/overview.html')
+	[
+		'http://docs.oracle.com/javase/8/docs/api/' : 'java.,javax.,org.xml.',
+		'http://groovy.codehaus.org/api/' : 'groovy.,org.codehaus.groovy.'
+	].each { link(it.key, it.value) }
+}
+
+generateHtml {
+	alwaysUseDefaultTitle = false
+	inputDirectory = file('src/markdown')
+	headerHtmlFile = file('src/markdown/template/header.html')
+	footerHtmlFile = file('src/markdown/template/footer.html')
+	pegdownExtensions = 'TOC,EXTANCHORLINKS,HARDWRAPS'
+}
+
+jar {
+	manifest.attributes(
+		'Main-Class': 'io.github.longfish801.mygonsole.MyGonsole',
+		'Class-Path': "${sourceSets.main.compileClasspath.files.collect { it.name }.join(' ')} ../conf/"
+	)
+}
+
+// 依存する JARファイルを抽出します
+task extractDependencies(type: Copy, dependsOn: jar) {
+	from sourceSets.main.compileClasspath.files
+	into 'build/libs'
+}
+
+createExe {
+	jar = "libs/${tasks.jar.outputs.files[0].name}"
+	outfile = "${project.name}.exe"
+	icon = '../resources/main/icon.ico'
+	dontWrapJar = true
+	language = 'JAPANESE'
+	//headerType = 'console'
+}
+
+// 各資材を配備します
+task cleanDeploy(type: Delete){
+	delete 'docs'
+	delete 'libs'
+	delete "${project.name}.exe"
+	delete "${project.name}.log"
+}
+clean.dependsOn(cleanDeploy)
+task deploy(dependsOn: [clean, groovydoc, generateHtml, extractDependencies, createExe]){
+	doLast {
+		copy {
+			from "build/launch4j/${project.name}.exe"
+			into '.'
+		}
+		copy {
+			from 'build/libs'
+			into 'libs'
+		}
+		copy {
+			from 'build/html'
+			into 'docs'
+		}
+		copy {
+			from 'build/docs/groovydoc'
+			into 'docs/groovydoc'
+		}
+	}
+}
